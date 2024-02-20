@@ -7,7 +7,7 @@ Pseudocode of Pangu-Weather
 # Linear: Linear transformation, available in all deep learning libraries
 # Conv3d and Con2d: Convolution with 2 or 3 dimensions, available in all deep learning libraries
 # ConvTranspose3d, ConvTranspose2d: transposed convolution with 2 or 3 dimensions, see Pytorch API or Tensorflow API
-from Your_AI_Library import Linear, Conv3d, Conv2d, ConvTranspose3d, ConvTranspose2d
+from torch import Linear, Conv3d, Conv2d, ConvTranspose3d, ConvTranspose2d
 
 # Functions in the networks, namely GeLU, DropOut, DropPath, LayerNorm, and SoftMax
 # GeLU: the GeLU activation function, see Pytorch API or Tensorflow API
@@ -16,21 +16,23 @@ from Your_AI_Library import Linear, Conv3d, Conv2d, ConvTranspose3d, ConvTranspo
 # A possible implementation of DropPath: from timm.models.layers import DropPath
 # LayerNorm: the layer normalization function, see Pytorch API or Tensorflow API
 # Softmax: softmax function, see Pytorch API or Tensorflow API
-from Your_AI_Library import GeLU, DropOut, DropPath, LayerNorm, SoftMax
+from torch import GeLU, DropOut, DropPath, LayerNorm, SoftMax
 
 # Common functions for roll, pad, and crop, depends on the data structure of your software environment
-from Your_AI_Library import roll3D, pad3D, pad2D, Crop3D, Crop2D
+from torch import roll3D, pad3D, pad2D, Crop3D, Crop2D
+
+import torch.nn.functional as F # 3D padding
 
 # Common functions for reshaping and changing the order of dimensions
 # reshape: change the shape of the data with the order unchanged, see Pytorch API or Tensorflow API
 # TransposeDimensions: change the order of the dimensions, see Pytorch API or Tensorflow API
-from Your_AI_Library import reshape, TransposeDimensions
+from torch import reshape, TransposeDimensions
 
 # Common functions for creating new tensors
 # ConstructTensor: create a new tensor with an arbitrary shape
 # TruncatedNormalInit: Initialize the tensor with Truncate Normalization distribution
 # RangeTensor: create a new tensor like range(a, b)
-from Your_AI_Library import ConstructTensor, TruncatedNormalInit, RangeTensor
+from torch import ConstructTensor, TruncatedNormalInit, RangeTensor
 
 # Common operations for the data, you may design it or simply use deep learning APIs default operations
 # LinearSpace: a tensor version of numpy.linspace
@@ -40,13 +42,13 @@ from Your_AI_Library import ConstructTensor, TruncatedNormalInit, RangeTensor
 # TensorSum: a tensor version of numpy.sum
 # TensorAbs: a tensor version of numpy.abs
 # Concatenate: a tensor version of numpy.concatenate
-from Your_AI_Library import LinearSpace, MeshGrid, Stack, Flatten, TensorSum, TensorAbs, Concatenate
+from torch import LinearSpace, MeshGrid, Stack, Flatten, TensorSum, TensorAbs, Concatenate
 
 # Common functions for training models
 # LoadModel and SaveModel: Load and save the model, some APIs may require further adaptation to hardwares
 # Backward: Gradient backward to calculate the gratitude of each parameters
 # UpdateModelParametersWithAdam: Use Adam to update parameters, e.g., torch.optim.Adam
-from Your_AI_Library import LoadModel, Backward, UpdateModelParametersWithAdam, SaveModel
+from torch import LoadModel, Backward, UpdateModelParametersWithAdam, SaveModel
 
 # Custom functions to read your data from the disc
 # LoadData: Load the ERA5 data
@@ -172,6 +174,12 @@ def Train():
       # Different weight can be applied for differen fields if needed
       loss = TensorAbs(output-target) + TensorAbs(output_surface-target_surface) * 0.25
 
+      #-------------------------------------------------------------------------------
+      # Potential update to loss: (+ output_x + output_y - 0)  where x,y,z subscripts
+      # denote the spatial deivatives of the output fields u and v winds with respect 
+      # to x and y.
+      #-------------------------------------------------------------------------------
+
       # Call the backward algorithm and calculate the gratitude of parameters
       Backward(loss)
 
@@ -186,7 +194,7 @@ def Train():
 class PanguModel:
   def __init__(self):
     # Drop path rate is linearly increased as the depth increases
-    drop_path_list = LinearSpace(0, 0.2, 8)
+    drop_list = torch.linspace(0, 0.2, 8)
 
     # Patch embedding
     self._input_layer = PatchEmbedding((2, 4, 4), 192)
@@ -252,6 +260,7 @@ class PatchEmbedding:
   def forward(self, input, input_surface):
     # Zero-pad the input
     input = Pad3D(input)
+    # maybe input = np.pad(input, pad_width=1) ?
     input_surface = Pad2D(input_surface)
 
     # Apply a linear projection for patch_size[0]*patch_size[1]*patch_size[2] patches, patch_size = (2, 4, 4) as in the original paper
@@ -282,7 +291,7 @@ class PatchRecovery:
     # The inverse operation of the patch embedding operation, patch_size = (2, 4, 4) as in the original paper
     # Reshape x back to three dimensions
     x = TransposeDimensions(x, (0, 2, 1))
-    x = reshape(x, target_shape=(x.shape[0], x.shape[1], Z, H, W))
+    x = torch.reshape(x, target_shape=(x.shape[0], x.shape[1], Z, H, W))
 
     # Call the transposed convolution
     output = self.conv(x[:, :, 1:, :, :])
